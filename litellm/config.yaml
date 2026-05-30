@@ -8,9 +8,9 @@ model_list:
       api_key: none
     model_info:
       id: gemma-4-e4b
-      max_input_tokens: 8192
+      max_input_tokens: 4096
       max_output_tokens: 4096
-      context_window: 8192
+      context_window: 4096
 
   - model_name: qwen2.5-coder-7b
     litellm_params:
@@ -19,9 +19,9 @@ model_list:
       api_key: none
     model_info:
       id: qwen2.5-coder-7b
-      max_input_tokens: 8192
+      max_input_tokens: 4096
       max_output_tokens: 4096
-      context_window: 8192
+      context_window: 4096
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
@@ -39,3 +39,8 @@ router_settings:
 
 litellm_settings:
   drop_params: true
+  # Stream tokens as they're generated — users see output immediately
+  # rather than waiting for the full response. Dramatically reduces
+  # perceived latency for slow or CPU-offloaded inference.
+  stream: true
+  request_timeout: 300

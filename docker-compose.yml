@@ -28,9 +28,13 @@ services:
     environment:
       HOME: /home/lmstudio
       GEMMA_MODEL: ${GEMMA_MODEL:-google/gemma-4-e4b}
-      GEMMA_CONTEXT_LENGTH: ${GEMMA_CONTEXT_LENGTH:-8192}
+      GEMMA_CONTEXT_LENGTH: ${GEMMA_CONTEXT_LENGTH:-4096}
       QWEN_MODEL: ${QWEN_MODEL:-qwen/qwen2.5-coder-7b}
-      QWEN_CONTEXT_LENGTH: ${QWEN_CONTEXT_LENGTH:-8192}
+      QWEN_CONTEXT_LENGTH: ${QWEN_CONTEXT_LENGTH:-4096}
+      # GPU_MODE: auto (default) | max | off
+      # 'max' puts all layers on GPU — fastest, but OOMs on 8 GB with both models loaded.
+      # Use 'max' only when running a single model or on a GPU with ≥12 GB VRAM.
+      GPU_MODE: ${GPU_MODE:-auto}
       LMS_SERVER_HOST: 0.0.0.0
       LMS_SERVER_PORT: 1234
     deploy:
@@ -60,7 +64,7 @@ services:
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
       DATABASE_URL: postgresql://litellm:${POSTGRES_PASSWORD}@postgres:5432/litellm
       LMSTUDIO_API_BASE: http://lmstudio:1234/v1
-    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "4"]
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]
     depends_on:
       postgres:
         condition: service_healthy
