@@ -7,8 +7,10 @@ lms daemon up
 echo "[lmstudio] Waiting for daemon socket..."
 sleep 3
 
-# Load Gemma model
+# Download + load Gemma model
 if [ -n "${GEMMA_MODEL}" ]; then
+    echo "[lmstudio] Downloading ${GEMMA_MODEL} (skipped if already cached)..."
+    lms get "${GEMMA_MODEL}" --yes
     echo "[lmstudio] Loading ${GEMMA_MODEL} (context-length=${GEMMA_CONTEXT_LENGTH:-8192})..."
     lms load "${GEMMA_MODEL}" \
         --context-length "${GEMMA_CONTEXT_LENGTH:-8192}" \
@@ -18,8 +20,10 @@ if [ -n "${GEMMA_MODEL}" ]; then
     echo "[lmstudio] ${GEMMA_MODEL} ready."
 fi
 
-# Load Qwen model
+# Download + load Qwen model
 if [ -n "${QWEN_MODEL}" ]; then
+    echo "[lmstudio] Downloading ${QWEN_MODEL} (skipped if already cached)..."
+    lms get "${QWEN_MODEL}" --yes
     echo "[lmstudio] Loading ${QWEN_MODEL} (context-length=${QWEN_CONTEXT_LENGTH:-8192})..."
     lms load "${QWEN_MODEL}" \
         --context-length "${QWEN_CONTEXT_LENGTH:-8192}" \
