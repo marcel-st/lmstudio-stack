@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     libatomic1 \
+    libgomp1 \
     gosu \
     && rm -rf /var/lib/apt/lists/*
 
