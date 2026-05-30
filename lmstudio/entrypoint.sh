@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Docker named volumes are mounted as root. Fix ownership then drop to uid 1000.
+if [ "$(id -u)" = "0" ]; then
+    chown -R lmstudio:lmstudio /home/lmstudio/.lmstudio
+    exec gosu lmstudio "$0" "$@"
+fi
+
 echo "[lmstudio] Starting llmster daemon..."
 lms daemon up
 

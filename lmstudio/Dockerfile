@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     libatomic1 \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # LM Studio must not run as root; uid 1000 is required
@@ -18,6 +19,10 @@ RUN curl -fsSL https://lmstudio.ai/install.sh | bash
 
 ENV PATH="/home/lmstudio/.lmstudio/bin:${PATH}"
 ENV HOME="/home/lmstudio"
+
+# Return to root so the container starts as root. The entrypoint fixes volume
+# ownership on first run then drops back to uid 1000 via gosu.
+USER root
 
 COPY --chown=lmstudio:lmstudio entrypoint.sh /home/lmstudio/entrypoint.sh
 RUN chmod +x /home/lmstudio/entrypoint.sh
