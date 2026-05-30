@@ -1,7 +1,6 @@
 # CUDA 12.4 runtime requires host NVIDIA driver >= 550.
-# If your driver is >= 530 but < 550, change the base image to:
-#   nvidia/cuda:12.1.0-runtime-ubuntu22.04
-FROM nvidia/cuda:12.4.1-runtime-ubuntu24.04
+# nvidia/cuda:12.4.1-runtime-ubuntu24.04 does not exist; ubuntu22.04 is the correct base.
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
