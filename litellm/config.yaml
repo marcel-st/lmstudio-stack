@@ -6,6 +6,11 @@ model_list:
       model: openai/qwen3-14b
       api_base: os.environ/LMSTUDIO_API_BASE
       api_key: none
+      # Disable Qwen3 thinking mode by default — saves 500–2000 tok of silent
+      # reasoning overhead per request. Re-enable per-request when needed:
+      #   {"enable_thinking": true, "thinking": {"type": "enabled", "budget_tokens": 2048}}
+      extra_body:
+        enable_thinking: false
     model_info:
       id: qwen3-14b
       max_input_tokens: 8192
@@ -27,7 +32,6 @@ router_settings:
   enable_pre_call_checks: true
 
 litellm_settings:
-  drop_params: true
   # Stream tokens as they're generated — users see output immediately
   # rather than waiting for the full response.
   stream: true
