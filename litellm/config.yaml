@@ -11,17 +11,17 @@ model_list:
       #   {"enable_thinking": true, "thinking": {"type": "enabled", "budget_tokens": 2048}}
       extra_body:
         enable_thinking: false
-    model_info:
-      id: qwen3-14b
-      max_input_tokens: 8192
-      max_output_tokens: 8192
-      context_window: 8192
       # Electricity-based pricing (€0.19538/kWh, RTX 5060 Ti ~160 W inference load).
       # input:  150 tok/s prefill  → €0.000008683/s ÷ 150 = €0.058/M tokens
       # output:  30 tok/s decode   → €0.000008683/s ÷  30 = €0.29/M tokens
       # LiteLLM labels these as "$" in the UI; values are in €.
       input_cost_per_token: 0.000000058
       output_cost_per_token: 0.00000029
+    model_info:
+      id: qwen3-14b
+      max_input_tokens: 16384
+      max_output_tokens: 16384
+      context_window: 16384
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
