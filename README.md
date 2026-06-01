@@ -2,15 +2,16 @@
 
 Headless LM Studio with LiteLLM as a secure API proxy. Runs on Docker with NVIDIA GPU support.
 
-- **LM Studio** (`localhost:1234`) — headless model server, OpenAI-compatible API
-- **LiteLLM** (`localhost:4000`) — proxy with web UI, user management, API key creation
-- **Models** — Gemma-4-e4b and Qwen2.5-Coder-7B
+- **LM Studio** (`:1234`) — headless model server, OpenAI-compatible API
+- **LiteLLM** (`:4000`) — proxy with web UI, user management, API key creation
+- **Model** — Qwen3-14B (reasoning, coding, document analytics; 128K context)
 
 ## Requirements
 
 - Docker + Docker Compose
 - NVIDIA Container Toolkit (`nvidia-container-toolkit` on Arch/CachyOS)
 - NVIDIA driver ≥ 550 (for CUDA 12.4; see `lmstudio/Dockerfile` to adjust)
+- GPU with ≥ 16 GB VRAM recommended (see [VRAM budget](#vram-budget))
 
 ## Setup
 
@@ -22,7 +23,7 @@ sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 
 # Verify GPU passthrough works
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu24.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 ```
 
 ### 2. Configure secrets
@@ -42,7 +43,7 @@ Edit `.env` and replace the placeholder values:
 docker compose up -d
 ```
 
-On first run, LM Studio will download both models (~8 GB total). This can take 20–60 minutes
+On first run, LM Studio will download Qwen3-14B (~8.3 GB). This can take 10–30 minutes
 depending on your connection. LiteLLM will start automatically once LM Studio is healthy.
 
 Watch progress:
@@ -56,7 +57,7 @@ docker compose logs -f lmstudio
 Once the stack is up, open the LiteLLM admin UI:
 
 ```
-http://localhost:4000/ui
+http://<host>:4000/ui
 ```
 
 Login with:
@@ -73,34 +74,72 @@ From there you can:
 # Check all services are healthy
 docker compose ps
 
-# LM Studio: confirm both models are loaded
+# LM Studio: confirm the model is loaded
 curl http://localhost:1234/v1/models | jq '.data[].id'
 
 # LiteLLM: test inference (replace KEY with your LITELLM_MASTER_KEY)
 curl http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"qwen2.5-coder-7b","messages":[{"role":"user","content":"Write hello world in Python"}],"max_tokens":100}'
+  -d '{"model":"qwen3-14b","messages":[{"role":"user","content":"Write hello world in Python"}],"max_tokens":100}'
 ```
+
+### Using Qwen3 thinking mode
+
+Qwen3-14B supports an extended reasoning mode. Enable it per-request with the `thinking` parameter:
+
+```bash
+curl http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-14b",
+    "thinking": {"type": "enabled", "budget_tokens": 2048},
+    "messages": [{"role": "user", "content": "Explain the tradeoffs of B-trees vs LSM-trees"}],
+    "max_tokens": 1000
+  }'
+```
+
+## VRAM budget
+
+Target hardware: **NVIDIA RTX 5060 Ti 16 GB**
+
+| Component | VRAM |
+|---|---|
+| Qwen3-14B (Q4_K_M) | ~8.3 GB |
+| CUDA runtime | ~0.3 GB |
+| KV cache @ 8192 ctx | ~1.0 GB |
+| 2× 4K Plex transcode | ~4.0 GB |
+| **Total** | **~13.6 GB** |
+| **Headroom** | **~2.4 GB** |
+
+Safe context range: **4096–16384**. Above 16384 may OOM during concurrent Plex hardware transcoding.
+To change the context length at runtime, see [Change context size](#change-context-size) below.
 
 ## Change context size
 
-Context size is set when models load. To change it:
+Context size is set when the model loads. To change it:
 
 ```bash
 # Using the helper script (updates .env and restarts lmstudio)
-./scripts/reload-context.sh gemma 16384
-./scripts/reload-context.sh qwen 16384
+./scripts/reload-context.sh 16384
 
-# Or manually: edit .env, then restart
+# Or manually: edit CONTEXT_LENGTH in .env, then restart
 docker compose restart lmstudio
 ```
 
 After restarting, update `max_input_tokens` and `context_window` in the LiteLLM admin UI under
 **Models + Endpoints → Edit model**.
 
-**VRAM note:** RTX 3060 (12GB) fits both models at 8192 context (~9.6 GB total). Both at 16K exceeds
-12 GB — if you need 16K, keep one model at 8K.
+## GPU mode
+
+The `GPU_MODE` env var (in `.env`) controls how model layers are placed:
+
+| Value | Behaviour |
+|---|---|
+| `max` (default) | All layers on GPU — fastest; safe on 16 GB with this single model |
+| `auto` | LM Studio auto-fits layers; use when the GPU is shared with heavy concurrent workloads |
+| `off` | CPU only |
 
 ## File layout
 
