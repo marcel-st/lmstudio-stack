@@ -22,18 +22,57 @@ No reverse proxy (HTTP-only, internal/local network use). No Redis (not needed a
 
 ---
 
+## Use Cases
+
+| Use Case | Model | Notes |
+|---|---|---|
+| Coding assistance | `qwen3-14b` | Fast, no thinking overhead |
+| Home Assistant control | `qwen3-14b` | Thinking off — speed critical for intent recognition |
+| Document analysis | `qwen3-14b` | Standard mode; text-only (no images) |
+| Financial / crypto analysis | `qwen3-14b-thinking` | Chain-of-thought for multi-step reasoning |
+| Complex T&D reasoning | `qwen3-14b-thinking` | Use when accuracy matters more than speed |
+
+---
+
 ## VRAM Budget
 
 | Component | VRAM |
 |---|---|
 | Qwen3-14B (Q4_K_M) | ~8.3 GB |
 | CUDA runtime | ~0.3 GB |
-| KV cache @ 8192 ctx | ~1.0 GB |
+| KV cache @ 16384 ctx | ~2.0 GB |
 | 2× 4K Plex transcode | ~4.0 GB |
-| **Total** | **~13.6 GB** |
-| **Headroom** | **~2.4 GB** |
+| **Total** | **~14.6 GB** |
+| **Headroom** | **~1.4 GB** |
 
 Safe context range: 4096–16384. Above 16384 may OOM during concurrent Plex hardware transcoding.
+
+---
+
+## Model Selection
+
+**Current: Qwen3-14B** — best dense model that fits the 16 GB budget with 2× 4K Plex reserved.
+Strong coding, proven Home Assistant tool calling, configurable thinking mode for reasoning tasks.
+
+> **Every time this codebase is revisited for improvements, re-evaluate whether Gemma 4 12B has overtaken Qwen3-14B.**
+
+| Axis | Qwen3-14B | Gemma 4 12B |
+|---|---|---|
+| Coding (HumanEval / SWE-Bench / LiveCodeBench) | ★★★★★ | ★★★★☆ |
+| Math / financial reasoning | ★★★★★ | ★★★★☆ |
+| HA tool calling (community-validated) | ★★★★★ | ★★★☆☆ |
+| Multimodal (images / audio / video) | ✗ text-only | ✓ native |
+| VRAM with 16K ctx + 2× 4K Plex | ~14.6 GB (1.4 GB free) | ~13.0 GB (3.0 GB free) |
+| Model maturity | Stable | Released June 2026 |
+
+**Status as of June 2026:** Qwen3-14B is the better choice. Gemma 4 12B's native multimodal would
+benefit document analysis with charts/images/crypto screenshots but requires LiteLLM + client-side
+stack changes to use. HA tool calling community validation is still early.
+
+**Switch to Gemma 4 12B when:**
+- It matches or exceeds Qwen3-14B on coding benchmarks (HumanEval, SWE-Bench, LiveCodeBench), AND
+- Home Assistant tool calling reliability is confirmed by the community, AND
+- You want native image/chart/PDF input and are ready to update the LiteLLM + client stack
 
 ---
 
@@ -82,7 +121,7 @@ lmstudio-stack/
 **Key env vars:**
 ```
 MODEL=qwen/qwen3-14b
-CONTEXT_LENGTH=8192
+CONTEXT_LENGTH=16384
 GPU_MODE=max
 LMS_SERVER_HOST=0.0.0.0
 LMS_SERVER_PORT=1234
@@ -112,14 +151,44 @@ HOME=/home/lmstudio
 **config.yaml key settings:**
 ```yaml
 model_list:
-  - model_name: qwen3-14b
+  - model_name: qwen3-14b           # default: thinking off, full 16K context
     litellm_params:
-      model: openai/qwen3-14b       # 'openai/' prefix = OpenAI-compatible endpoint
+      model: openai/qwen3-14b
       api_base: os.environ/LMSTUDIO_API_BASE
       api_key: none
+      extra_body:
+        enable_thinking: false
+      stream_options:
+        include_usage: true
+      input_cost_per_token: 0.000000058
+      output_cost_per_token: 0.00000029
     model_info:
-      max_input_tokens: 8192
-      context_window: 8192
+      mode: chat
+      max_input_tokens: 16384
+      context_window: 16384
+      input_cost_per_token: 0.000000058
+      output_cost_per_token: 0.00000029
+
+  - model_name: qwen3-14b-thinking  # financial/complex tasks: thinking on, 12K input limit
+    litellm_params:
+      model: openai/qwen3-14b
+      api_base: os.environ/LMSTUDIO_API_BASE
+      api_key: none
+      extra_body:
+        enable_thinking: true
+        thinking:
+          type: enabled
+          budget_tokens: 2048
+      stream_options:
+        include_usage: true
+      input_cost_per_token: 0.000000058
+      output_cost_per_token: 0.00000029
+    model_info:
+      mode: chat
+      max_input_tokens: 12288       # leaves room for 2048 thinking + output within 16384 ctx
+      context_window: 12288
+      input_cost_per_token: 0.000000058
+      output_cost_per_token: 0.00000029
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
@@ -134,8 +203,8 @@ litellm_settings:
 ```
 
 **Note on `store_model_in_db: true`:** Once enabled, the DB version of model config wins on restart.
-The `config.yaml` `model_list` seeds defaults on the very first startup only. After that, use the
-admin UI to update `max_input_tokens` / `context_window` when the LM Studio context size changes.
+- **Existing models:** config.yaml changes are ignored; use the admin UI to update params
+- **New model aliases** (e.g. `qwen3-14b-thinking`): picked up on restart since they don't exist in DB yet
 
 **Startup dependency:** `depends_on: postgres (healthy) AND lmstudio (healthy)`
 
@@ -165,6 +234,35 @@ Context size changes require a model reload in LM Studio (can't change on a live
 2. Login: username `admin`, password = value of `LITELLM_MASTER_KEY` from `.env`
 3. **Admin panel → Users → Create User**: set email, password, role `internal_user`
 4. Users log in at the same UI URL, go to **My Keys → Create Key**, select models from dropdown
+
+---
+
+## Home Assistant Integration
+
+LiteLLM's OpenAI-compatible endpoint at `http://<host>:4000/v1` connects directly to Home Assistant
+via the [extended_openai_conversation](https://github.com/jekalmin/extended_openai_conversation)
+HACS integration (recommended for full tool calling) or the built-in OpenAI integration.
+
+**Setup:**
+
+1. In the LiteLLM admin UI, create a dedicated API key for Home Assistant — restrict it to
+   `qwen3-14b` only (not `qwen3-14b-thinking`; HA needs fast responses, not chain-of-thought)
+
+2. Install `extended_openai_conversation` via HACS in Home Assistant
+
+3. Settings → Devices & Services → Add Integration → Extended OpenAI Conversation:
+   - **API Key:** the HA-specific LiteLLM key from step 1
+   - **Base URL:** `http://<host>:4000/v1`
+   - **Model:** `qwen3-14b`
+
+4. Settings → Voice Assistants → Edit assistant → set Conversation agent to the new integration
+
+**Notes:**
+- Qwen3-14B uses Hermes-style tool calling; `extended_openai_conversation` uses this for service
+  calls and entity control
+- Keep thinking mode off for HA (the default `qwen3-14b` alias) — it adds 1–3 s latency that
+  hurts intent recognition
+- Test with a simple command ("turn off the living room light") before building automations
 
 ---
 

@@ -31,6 +31,32 @@ model_list:
       input_cost_per_token: 0.000000058
       output_cost_per_token: 0.00000029
 
+  # Thinking alias — same model, chain-of-thought enabled.
+  # Use for financial/crypto analysis and complex multi-step reasoning.
+  # max_input_tokens capped at 12288: leaves 4096 for thinking (2048 budget) + output within 16384 ctx.
+  - model_name: qwen3-14b-thinking
+    litellm_params:
+      model: openai/qwen3-14b
+      api_base: os.environ/LMSTUDIO_API_BASE
+      api_key: none
+      extra_body:
+        enable_thinking: true
+        thinking:
+          type: enabled
+          budget_tokens: 2048
+      stream_options:
+        include_usage: true
+      input_cost_per_token: 0.000000058
+      output_cost_per_token: 0.00000029
+    model_info:
+      id: qwen3-14b-thinking
+      mode: chat
+      max_input_tokens: 12288
+      max_output_tokens: 12288
+      context_window: 12288
+      input_cost_per_token: 0.000000058
+      output_cost_per_token: 0.00000029
+
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   salt_key: os.environ/LITELLM_SALT_KEY
