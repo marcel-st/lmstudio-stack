@@ -28,8 +28,11 @@ sleep 3
 echo "[lmstudio] Downloading ${MODEL} (skipped if already cached)..."
 lms get "${MODEL}" --yes
 
-# Find the main GGUF file. Exclude vision projector files (mmproj / *proj*).
-MODEL_FILE=$(find "${HOME}/.lmstudio/models" -name "*.gguf" \
+# Find the main GGUF for the requested model (e.g. google/gemma-4-12b → gemma-4-12b).
+# Scope the search to directories matching the model basename to avoid picking up
+# other cached models. Exclude vision projector files (mmproj / *proj*).
+MODEL_SUBDIR=$(basename "${MODEL}")
+MODEL_FILE=$(find "${HOME}/.lmstudio/models" -ipath "*${MODEL_SUBDIR}*" -name "*.gguf" \
     ! -iname "*mmproj*" ! -iname "*proj*" | sort | head -1)
 
 if [ -z "${MODEL_FILE}" ]; then

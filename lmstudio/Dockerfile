@@ -32,7 +32,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates libatomic1 libgomp1 gosu \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=llama-builder /llama.cpp/build/bin/llama-server /usr/local/bin/llama-server
+# Copy entire build output (binary + shared libs like libllama-server-impl.so, libggml-cuda.so, etc.)
+COPY --from=llama-builder /llama.cpp/build/bin/ /usr/local/lib/llama/
+RUN ln -s /usr/local/lib/llama/llama-server /usr/local/bin/llama-server \
+    && echo "/usr/local/lib/llama" > /etc/ld.so.conf.d/llama.conf \
+    && ldconfig
 
 # LM Studio must not run as root; uid 1000 is required
 RUN useradd -m -u 1000 -s /bin/bash lmstudio
