@@ -54,4 +54,4 @@ exec llama-server \
     --port         "${LMS_SERVER_PORT:-1234}" \
     --ctx-size     "${CONTEXT_LENGTH:-16384}" \
     --n-gpu-layers "$(n_gpu_layers)" \
-    --flash-attn
+    --flash-attn on
