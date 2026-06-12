@@ -21,9 +21,9 @@ RUN cmake -B /llama.cpp/build -S /llama.cpp \
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
 FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
 
-# cuBLAS is not bundled in the base runtime image but is required by llama-server
+# libcublas is already present in the cuda:12.8.0-runtime base image
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates libatomic1 libgomp1 gosu libcublas-12-8 \
+    curl ca-certificates libatomic1 libgomp1 gosu \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=llama-builder /llama.cpp/build/bin/llama-server /usr/local/bin/llama-server

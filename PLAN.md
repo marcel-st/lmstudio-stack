@@ -107,7 +107,7 @@ lmstudio-stack/
 **Build process (Dockerfile):**
 1. Builder stage: install cmake/git, clone llama.cpp, build `llama-server` with `GGML_CUDA=ON`
    targeting sm_89 (RTX 40xx) and sm_120 (RTX 50xx / Blackwell)
-2. Runtime stage: install `libcublas-12-8`, copy `llama-server` binary from builder
+2. Runtime stage: copy `llama-server` binary from builder (`libcublas` already in base image)
 3. Install LM Studio CLI (`lms`) as uid 1000 — used **only for model downloads**
 4. Copy `entrypoint.sh`; return to root
 
