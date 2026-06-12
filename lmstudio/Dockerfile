@@ -10,6 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp /llama.cpp
 
+# libcuda.so.1 is not present at Docker build time (injected by the host driver
+# at runtime via --gpus). Create a versioned symlink to the CUDA stub so the
+# linker can resolve it; the real library is used when the container runs.
+RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/lib/libcuda.so.1 \
+    && ldconfig
+
 # sm_89 = Ada Lovelace (RTX 40xx)  sm_120 = Blackwell (RTX 50xx)
 # Extend the list if you need sm_86 (RTX 30xx) or sm_80 (A100).
 RUN cmake -B /llama.cpp/build -S /llama.cpp \
