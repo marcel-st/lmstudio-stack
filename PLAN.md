@@ -120,7 +120,7 @@ lmstudio-stack/
 
 **Key env vars:**
 ```
-MODEL=google/gemma-4-12b-it
+MODEL=google/gemma-4-12b
 CONTEXT_LENGTH=16384
 GPU_MODE=max
 LMS_SERVER_HOST=0.0.0.0
@@ -312,3 +312,4 @@ nvidia-smi dmon -s u -d 2
 | DB model config overrides config.yaml after first boot | Expected; use admin UI to update model params after initial seed |
 | config.yaml must be baked into the LiteLLM image | Bind mounts fail on remote Docker hosts; `litellm/Dockerfile` COPYs it in |
 | `lms server start` is non-blocking | Container kept alive via `tail --pid=$DAEMON_PID -f /dev/null` |
+| Gemma 4 12B vision fails in LM Studio | Open bug: `unknown projector type: gemma4uv` (lmstudio-ai/lmstudio-bug-tracker#2021). Text inference works. Check issue for fix status before sending image inputs. |
