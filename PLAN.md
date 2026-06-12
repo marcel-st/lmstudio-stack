@@ -4,7 +4,7 @@
 
 Production-ready Docker Compose stack that runs LM Studio headlessly with GPU acceleration,
 fronted by LiteLLM as a secure API proxy. LiteLLM provides a web UI for user/key management with
-model-level access control. Model: Qwen3-14B. Hardware target: NVIDIA RTX 5060 Ti 16 GB on
+model-level access control. Model: Gemma 4 12B. Hardware target: NVIDIA RTX 5060 Ti 16 GB on
 CachyOS Linux.
 
 ---
@@ -26,11 +26,12 @@ No reverse proxy (HTTP-only, internal/local network use). No Redis (not needed a
 
 | Use Case | Model | Notes |
 |---|---|---|
-| Coding assistance | `qwen3-14b` | Fast, no thinking overhead |
-| Home Assistant control | `qwen3-14b` | Thinking off — speed critical for intent recognition |
-| Document analysis | `qwen3-14b` | Standard mode; text-only (no images) |
-| Financial / crypto analysis | `qwen3-14b-thinking` | Chain-of-thought for multi-step reasoning |
-| Complex T&D reasoning | `qwen3-14b-thinking` | Use when accuracy matters more than speed |
+| Coding assistance | `gemma-4-12b` | |
+| Home Assistant control | `gemma-4-12b` | Fast responses; no thinking overhead |
+| Document analysis | `gemma-4-12b` | Native multimodal: pass images/charts directly |
+| Financial / crypto analysis | `gemma-4-12b` | Native multimodal: send chart screenshots for analysis |
+| Trading bot integration | `gemma-4-12b` | Legit trading not blocked; official model preferred |
+| Complex T&D reasoning | `gemma-4-12b` | |
 
 ---
 
@@ -38,41 +39,40 @@ No reverse proxy (HTTP-only, internal/local network use). No Redis (not needed a
 
 | Component | VRAM |
 |---|---|
-| Qwen3-14B (Q4_K_M) | ~8.3 GB |
+| Gemma 4 12B (Q4_K_M) | ~7.4 GB |
 | CUDA runtime | ~0.3 GB |
-| KV cache @ 16384 ctx | ~2.0 GB |
+| KV cache @ 16384 ctx | ~1.5 GB |
 | 2× 4K Plex transcode | ~4.0 GB |
-| **Total** | **~14.6 GB** |
-| **Headroom** | **~1.4 GB** |
+| **Total** | **~13.2 GB** |
+| **Headroom** | **~2.8 GB** |
 
-Safe context range: 4096–16384. Above 16384 may OOM during concurrent Plex hardware transcoding.
+Safe context range: 4096–16384. With Plex idle, 24576 is viable (~2.0 GB KV, ~14.0 GB total).
 
 ---
 
 ## Model Selection
 
-**Current: Qwen3-14B** — best dense model that fits the 16 GB budget with 2× 4K Plex reserved.
-Strong coding, proven Home Assistant tool calling, configurable thinking mode for reasoning tasks.
+**Current: Gemma 4 12B** — switched June 2026 for native multimodal (crypto charts, PDF images,
+trading data screenshots), more VRAM headroom, and suitability for trading bot integration.
 
-> **Every time this codebase is revisited for improvements, re-evaluate whether Gemma 4 12B has overtaken Qwen3-14B.**
+> **Every time this codebase is revisited for improvements, re-evaluate whether a better model has emerged.**
 
-| Axis | Qwen3-14B | Gemma 4 12B |
+| Axis | Gemma 4 12B | Qwen3-14B |
 |---|---|---|
-| Coding (HumanEval / SWE-Bench / LiveCodeBench) | ★★★★★ | ★★★★☆ |
-| Math / financial reasoning | ★★★★★ | ★★★★☆ |
-| HA tool calling (community-validated) | ★★★★★ | ★★★☆☆ |
-| Multimodal (images / audio / video) | ✗ text-only | ✓ native |
-| VRAM with 16K ctx + 2× 4K Plex | ~14.6 GB (1.4 GB free) | ~13.0 GB (3.0 GB free) |
-| Model maturity | Stable | Released June 2026 |
+| Coding (HumanEval / SWE-Bench / LiveCodeBench) | ★★★★☆ | ★★★★★ |
+| Math / financial reasoning | ★★★★☆ | ★★★★★ |
+| HA tool calling | ★★★★☆ | ★★★★★ (community-proven) |
+| Multimodal (images / audio / video) | ✓ native | ✗ text-only |
+| VRAM with 16K ctx + 2× 4K Plex | ~13.2 GB (2.8 GB free) | ~14.6 GB (1.4 GB free) |
+| Model maturity | Released June 2026 | Stable |
 
-**Status as of June 2026:** Qwen3-14B is the better choice. Gemma 4 12B's native multimodal would
-benefit document analysis with charts/images/crypto screenshots but requires LiteLLM + client-side
-stack changes to use. HA tool calling community validation is still early.
+**Switch back to Qwen3-14B (or Qwen3.5-14B when released) when:**
+- Coding benchmark gap matters more than multimodal, AND
+- HA tool calling on Gemma proves unreliable in practice
 
-**Switch to Gemma 4 12B when:**
-- It matches or exceeds Qwen3-14B on coding benchmarks (HumanEval, SWE-Bench, LiveCodeBench), AND
-- Home Assistant tool calling reliability is confirmed by the community, AND
-- You want native image/chart/PDF input and are ready to update the LiteLLM + client stack
+**Switch to a different model when:**
+- Qwen3.5/3.6 releases a dense 14B variant that fits the VRAM budget, OR
+- A better model emerges — check HumanEval, SWE-Bench, MMLU, HA community reports
 
 ---
 
@@ -114,13 +114,13 @@ lmstudio-stack/
 2. `lms daemon up` — start the local IPC daemon (prerequisite for all `lms` commands)
 3. `sleep 3` — wait for daemon socket
 4. `lms get $MODEL --yes` — download model (skipped if already cached in named volume)
-5. `lms load $MODEL --context-length $CONTEXT_LENGTH --identifier qwen3-14b --gpu max --yes`
+5. `lms load $MODEL --context-length $CONTEXT_LENGTH --identifier gemma-4-12b --gpu max --yes`
 6. `lms server start --port 1234 --bind 0.0.0.0` — non-blocking; daemon keeps running
 7. `tail --pid=$DAEMON_PID -f /dev/null` — keeps container alive until llmster exits
 
 **Key env vars:**
 ```
-MODEL=qwen/qwen3-14b
+MODEL=google/gemma-4-12b-it
 CONTEXT_LENGTH=16384
 GPU_MODE=max
 LMS_SERVER_HOST=0.0.0.0
@@ -151,13 +151,11 @@ HOME=/home/lmstudio
 **config.yaml key settings:**
 ```yaml
 model_list:
-  - model_name: qwen3-14b           # default: thinking off, full 16K context
+  - model_name: gemma-4-12b
     litellm_params:
-      model: openai/qwen3-14b
+      model: openai/gemma-4-12b
       api_base: os.environ/LMSTUDIO_API_BASE
       api_key: none
-      extra_body:
-        enable_thinking: false
       stream_options:
         include_usage: true
       input_cost_per_token: 0.000000058
@@ -166,27 +164,6 @@ model_list:
       mode: chat
       max_input_tokens: 16384
       context_window: 16384
-      input_cost_per_token: 0.000000058
-      output_cost_per_token: 0.00000029
-
-  - model_name: qwen3-14b-thinking  # financial/complex tasks: thinking on, 12K input limit
-    litellm_params:
-      model: openai/qwen3-14b
-      api_base: os.environ/LMSTUDIO_API_BASE
-      api_key: none
-      extra_body:
-        enable_thinking: true
-        thinking:
-          type: enabled
-          budget_tokens: 2048
-      stream_options:
-        include_usage: true
-      input_cost_per_token: 0.000000058
-      output_cost_per_token: 0.00000029
-    model_info:
-      mode: chat
-      max_input_tokens: 12288       # leaves room for 2048 thinking + output within 16384 ctx
-      context_window: 12288
       input_cost_per_token: 0.000000058
       output_cost_per_token: 0.00000029
 
@@ -204,7 +181,7 @@ litellm_settings:
 
 **Note on `store_model_in_db: true`:** Once enabled, the DB version of model config wins on restart.
 - **Existing models:** config.yaml changes are ignored; use the admin UI to update params
-- **New model aliases** (e.g. `qwen3-14b-thinking`): picked up on restart since they don't exist in DB yet
+- **New model aliases:** picked up on restart since they don't exist in DB yet
 
 **Startup dependency:** `depends_on: postgres (healthy) AND lmstudio (healthy)`
 
@@ -246,21 +223,21 @@ HACS integration (recommended for full tool calling) or the built-in OpenAI inte
 **Setup:**
 
 1. In the LiteLLM admin UI, create a dedicated API key for Home Assistant — restrict it to
-   `qwen3-14b` only (not `qwen3-14b-thinking`; HA needs fast responses, not chain-of-thought)
+   `gemma-4-12b` only (not `gemma-4-12b-thinking`; HA needs fast responses, not chain-of-thought)
 
 2. Install `extended_openai_conversation` via HACS in Home Assistant
 
 3. Settings → Devices & Services → Add Integration → Extended OpenAI Conversation:
    - **API Key:** the HA-specific LiteLLM key from step 1
    - **Base URL:** `http://<host>:4000/v1`
-   - **Model:** `qwen3-14b`
+   - **Model:** `gemma-4-12b`
 
 4. Settings → Voice Assistants → Edit assistant → set Conversation agent to the new integration
 
 **Notes:**
 - Qwen3-14B uses Hermes-style tool calling; `extended_openai_conversation` uses this for service
   calls and entity control
-- Keep thinking mode off for HA (the default `qwen3-14b` alias) — it adds 1–3 s latency that
+- Keep thinking mode off for HA (the default `gemma-4-12b` alias) — it adds 1–3 s latency that
   hurts intent recognition
 - Test with a simple command ("turn off the living room light") before building automations
 
@@ -295,12 +272,12 @@ docker compose ps
 
 # LM Studio: model loaded
 curl http://localhost:1234/v1/models | jq '.data[].id'
-# Expected: "qwen3-14b"
+# Expected: "gemma-4-12b"
 
 # LM Studio: direct inference
 curl http://localhost:1234/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"qwen3-14b","messages":[{"role":"user","content":"Say hello"}],"max_tokens":50}'
+  -d '{"model":"gemma-4-12b","messages":[{"role":"user","content":"Say hello"}],"max_tokens":50}'
 
 # LiteLLM: health
 curl http://localhost:4000/health/liveliness
@@ -313,7 +290,7 @@ curl -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
 curl http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"qwen3-14b","messages":[{"role":"user","content":"Write hello world in Python"}],"max_tokens":100}'
+  -d '{"model":"gemma-4-12b","messages":[{"role":"user","content":"Write hello world in Python"}],"max_tokens":100}'
 
 # GPU usage (run during inference)
 nvidia-smi dmon -s u -d 2
@@ -329,7 +306,7 @@ nvidia-smi dmon -s u -d 2
 | LM Studio refuses to run as root | gosu pattern: container starts as root, fixes volume ownership, drops to uid 1000 |
 | Docker named volumes mounted as root | `chown -R lmstudio .lmstudio` on startup before `gosu` drops privileges |
 | `HOME` env var must be set correctly | Dockerfile sets `ENV HOME=/home/lmstudio`; compose re-declares it |
-| LM Studio model identifier must match config.yaml | `--identifier qwen3-14b` in entrypoint must equal `openai/qwen3-14b` suffix in config.yaml |
+| LM Studio model identifier must match config.yaml | `--identifier gemma-4-12b` in entrypoint must equal `openai/gemma-4-12b` suffix in config.yaml |
 | `LITELLM_SALT_KEY` must never change after first run | Documented in `.env.example`; changing it breaks all existing virtual keys |
 | NVIDIA driver version check | CUDA 12.4 requires driver ≥550; adjust base image tag if host has an older driver |
 | DB model config overrides config.yaml after first boot | Expected; use admin UI to update model params after initial seed |

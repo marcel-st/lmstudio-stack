@@ -28,11 +28,11 @@ sleep 3
 if [ -n "${MODEL}" ]; then
     echo "[lmstudio] Downloading ${MODEL} (skipped if already cached)..."
     lms get "${MODEL}" --yes
-    echo "[lmstudio] Loading ${MODEL} (context-length=${CONTEXT_LENGTH:-8192}, gpu=${GPU_MODE:-max})..."
+    echo "[lmstudio] Loading ${MODEL} (context-length=${CONTEXT_LENGTH:-16384}, gpu=${GPU_MODE:-max})..."
     # shellcheck disable=SC2046
     lms load "${MODEL}" \
-        --context-length "${CONTEXT_LENGTH:-8192}" \
-        --identifier "qwen3-14b" \
+        --context-length "${CONTEXT_LENGTH:-16384}" \
+        --identifier "gemma-4-12b" \
         $(gpu_flag) \
         --yes
     echo "[lmstudio] ${MODEL} ready."
