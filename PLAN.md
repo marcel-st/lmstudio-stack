@@ -99,39 +99,40 @@ lmstudio-stack/
 
 ### `lmstudio` (custom build)
 
-**Base image:** `nvidia/cuda:12.4.1-runtime-ubuntu22.04`
-- Requires host NVIDIA driver ≥550 (check with `nvidia-smi`)
-- ubuntu24.04 variant of this CUDA tag does not exist; ubuntu22.04 is correct
+**Base images (multi-stage):**
+- Builder: `nvidia/cuda:12.8.0-devel-ubuntu22.04` — CUDA 12.8 required for Blackwell (sm_120 / RTX 50xx)
+- Runtime: `nvidia/cuda:12.8.0-runtime-ubuntu22.04` — host driver must be ≥570
+- **First `docker compose build` takes 10–20 min** (compiling llama.cpp from source)
 
 **Build process (Dockerfile):**
-1. Install `curl`, `ca-certificates`, `libatomic1`, `libgomp1`, `gosu`
-2. Create user `lmstudio` (uid 1000) — required; LM Studio refuses to run as root
-3. Run `curl -fsSL https://lmstudio.ai/install.sh | bash` as uid 1000 → installs `lms` CLI and `llmster` daemon to `~/.lmstudio/bin/`
-4. Return to root; copy `entrypoint.sh`
+1. Builder stage: install cmake/git, clone llama.cpp, build `llama-server` with `GGML_CUDA=ON`
+   targeting sm_89 (RTX 40xx) and sm_120 (RTX 50xx / Blackwell)
+2. Runtime stage: install `libcublas-12-8`, copy `llama-server` binary from builder
+3. Install LM Studio CLI (`lms`) as uid 1000 — used **only for model downloads**
+4. Copy `entrypoint.sh`; return to root
 
 **entrypoint.sh startup sequence:**
 1. If running as root: `chown -R lmstudio .lmstudio` then `exec gosu lmstudio` (volume ownership fix)
-2. `lms daemon up` — start the local IPC daemon (prerequisite for all `lms` commands)
+2. `lms daemon up` — start IPC daemon (required for `lms get`)
 3. `sleep 3` — wait for daemon socket
 4. `lms get $MODEL --yes` — download model (skipped if already cached in named volume)
-5. `lms load $MODEL --context-length $CONTEXT_LENGTH --identifier gemma-4-12b --gpu max --yes`
-6. `lms server start --port 1234 --bind 0.0.0.0` — non-blocking; daemon keeps running
-7. `tail --pid=$DAEMON_PID -f /dev/null` — keeps container alive until llmster exits
+5. `find ~/.lmstudio/models -name "*.gguf" ! -iname "*mmproj*"` — locate GGUF file
+6. `exec llama-server --model <path> --alias <id> --ctx-size $CONTEXT_LENGTH --n-gpu-layers -1 --flash-attn`
 
 **Key env vars:**
 ```
 MODEL=google/gemma-4-12b
+MODEL_IDENTIFIER=gemma-4-12b   # alias in /v1/models; must match litellm config suffix
 CONTEXT_LENGTH=16384
-GPU_MODE=max
+GPU_MODE=max                   # max → --n-gpu-layers -1 | off → 0
 LMS_SERVER_HOST=0.0.0.0
 LMS_SERVER_PORT=1234
 HOME=/home/lmstudio
 ```
 
 **GPU_MODE values:**
-- `max` — all layers on GPU (default; optimal for single model on 16 GB)
-- `auto` — LM Studio auto-fits layers into available VRAM
-- `off` — CPU only
+- `max` — all layers on GPU via `--n-gpu-layers -1` (default)
+- `off` — CPU only via `--n-gpu-layers 0`
 
 **Volumes:**
 - `lmstudio_models` → `~/.lmstudio/models` (model files; persists across recreates)
@@ -311,5 +312,6 @@ nvidia-smi dmon -s u -d 2
 | NVIDIA driver version check | CUDA 12.4 requires driver ≥550; adjust base image tag if host has an older driver |
 | DB model config overrides config.yaml after first boot | Expected; use admin UI to update model params after initial seed |
 | config.yaml must be baked into the LiteLLM image | Bind mounts fail on remote Docker hosts; `litellm/Dockerfile` COPYs it in |
-| `lms server start` is non-blocking | Container kept alive via `tail --pid=$DAEMON_PID -f /dev/null` |
-| Gemma 4 12B vision fails in LM Studio | Open bug: `unknown projector type: gemma4uv` (lmstudio-ai/lmstudio-bug-tracker#2021). Text inference works. Check issue for fix status before sending image inputs. |
+| First `docker compose build` takes 10–20 min | Compiling llama.cpp from source with CUDA. Subsequent builds use Docker layer cache. |
+| llama-server replaces lms server start | `lms` daemon still runs for model downloads; `exec llama-server` is the container's main process |
+| GGUF file location | entrypoint uses `find` to locate the model; if multiple GGUFs exist, it picks the first alphabetically. Control with MODEL env var. |

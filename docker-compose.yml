@@ -28,10 +28,13 @@ services:
     environment:
       HOME: /home/lmstudio
       MODEL: ${MODEL:-google/gemma-4-12b}
+      # Alias exposed in /v1/models and used by LiteLLM; defaults to basename of MODEL
+      MODEL_IDENTIFIER: ${MODEL_IDENTIFIER:-gemma-4-12b}
       CONTEXT_LENGTH: ${CONTEXT_LENGTH:-16384}
-      # GPU_MODE: max (default) | auto | off
-      # Single model on 16 GB — all layers fit on GPU.
-      # Switch to 'auto' if sharing the GPU with heavy concurrent workloads.
+      # GPU_MODE: max (default) | off | auto
+      #   max  → --n-gpu-layers -1 (all layers on GPU)
+      #   off  → --n-gpu-layers  0 (CPU only)
+      #   auto → same as max in current entrypoint
       GPU_MODE: ${GPU_MODE:-max}
       LMS_SERVER_HOST: 0.0.0.0
       LMS_SERVER_PORT: 1234
