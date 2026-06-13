@@ -45,3 +45,7 @@ litellm_settings:
   # rather than waiting for the full response.
   stream: true
   request_timeout: 300
+  # Expose Prometheus metrics at /metrics for Grafana scraping.
+  # Tracks: request count, input/output tokens, latency (proxied traffic only).
+  success_callback: ["prometheus"]
+  failure_callback: ["prometheus"]

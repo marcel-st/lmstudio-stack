@@ -13,12 +13,19 @@ CachyOS Linux.
 
 ```
 Host (CachyOS, RTX 5060 Ti 16 GB)
-├── lmstudio  :1234   ← headless LM Studio daemon + API server (GPU)
-├── litellm   :4000   ← LiteLLM proxy + admin UI
-└── postgres  :5432   ← LiteLLM persistence (keys, users, spend)
+├── lmstudio   :1234   ← headless llama-server (GPU inference + /metrics)
+├── litellm    :4000   ← LiteLLM proxy + admin UI (+ /metrics for proxied traffic)
+├── postgres   :5432   ← LiteLLM persistence (keys, users, spend)
+├── prometheus :9090   ← scrapes lmstudio:1234/metrics + litellm:4000/metrics
+└── grafana    :3000   ← dashboard (anonymous read-only; admin login for edits)
 ```
 
 No reverse proxy (HTTP-only, internal/local network use). No Redis (not needed at this scale).
+
+**Traffic split on the dashboard:**
+- `lmstudio /metrics` — ALL inference traffic (direct + proxied)
+- `litellm /metrics` — proxied-only traffic
+- **direct = all − proxied** (derived; shown on "Direct vs Proxied" panel)
 
 ---
 
@@ -89,6 +96,16 @@ lmstudio-stack/
 │   └── entrypoint.sh
 ├── litellm/
 │   └── config.yaml
+├── prometheus/
+│   └── prometheus.yml             ← scrape config (lmstudio + litellm)
+├── grafana/
+│   ├── provisioning/
+│   │   ├── datasources/
+│   │   │   └── prometheus.yml     ← auto-wires Prometheus datasource
+│   │   └── dashboards/
+│   │       └── provider.yml       ← points Grafana at /var/lib/grafana/dashboards
+│   └── dashboards/
+│       └── llm-stack.json         ← provisioned dashboard (10 panels)
 └── scripts/
     └── reload-context.sh          ← helper for context-size changes
 ```
@@ -192,6 +209,41 @@ litellm_settings:
 
 **Image:** `postgres:16-alpine`
 **healthcheck:** `pg_isready -U litellm`
+
+---
+
+## Monitoring Stack
+
+### Prometheus (`prom/prometheus:v2.54.1`) — :9090
+
+Scrapes every 15s:
+- `lmstudio:1234/metrics` — llama-server Prometheus endpoint (enabled via `--metrics` flag)
+- `litellm:4000/metrics` — LiteLLM callback metrics (enabled via `success_callback: ["prometheus"]`)
+
+Data retained 30 days. Accessible at `http://<host>:9090` for ad-hoc PromQL.
+
+### Grafana (`grafana/grafana:11.3.0`) — :3000
+
+Auto-provisioned on startup (no manual setup needed):
+- Datasource: Prometheus at `http://prometheus:9090`
+- Dashboard: `grafana/dashboards/llm-stack.json` (10 panels, auto-loaded)
+
+**Default home dashboard panels:**
+
+| Panel | Source | What it shows |
+|---|---|---|
+| Active Requests | llama-server | Requests in flight right now |
+| Output Tokens/sec | llama-server | Generated tokens/sec (1m avg) |
+| KV Cache Used | llama-server | Cache fullness (gauge, 0–100%) |
+| Queued Requests | llama-server | Backpressure indicator |
+| Token Throughput | llama-server | Input vs output tok/s over time |
+| Request Rate | both | All traffic vs LiteLLM proxied |
+| KV Cache Over Time | llama-server | Cache trend |
+| LiteLLM Latency | LiteLLM | p50 / p95 / p99 end-to-end |
+| LiteLLM Tokens | LiteLLM | Proxied input/output rates |
+| Direct vs Proxied | derived | Stacked: direct + LiteLLM = total |
+
+**Access:** Anonymous read-only by default (no login). Admin login at `:3000` with `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` from `.env`.
 
 ---
 
@@ -315,3 +367,6 @@ nvidia-smi dmon -s u -d 2
 | First `docker compose build` takes 10–20 min | Compiling llama.cpp from source with CUDA. Subsequent builds use Docker layer cache. |
 | llama-server replaces lms server start | `lms` daemon still runs for model downloads; `exec llama-server` is the container's main process |
 | GGUF file location | entrypoint uses `find` to locate the model; if multiple GGUFs exist, it picks the first alphabetically. Control with MODEL env var. |
+| Grafana shows no data on first load | Prometheus needs 1–2 scrape cycles (30s) and llama-server must be serving a request. Panels show "No data" until first scrape succeeds. |
+| `litellm_requests_metric_total` absent | LiteLLM metric only appears after first proxied request. Panels referencing it show "No data" until traffic flows through LiteLLM. |
+| Dashboard edits lost on container restart | Edit `grafana/dashboards/llm-stack.json` in the repo — Grafana re-loads it on restart. UI edits alone don't persist (allowUiUpdates=true lets you prototype, then save to JSON). |
